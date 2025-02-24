@@ -84,9 +84,9 @@ commands:
         - postmpp
         - autosd-pipeline
       parallel: false
-- id: jumpstarter-pipeline
-    exec:
-      label: "Start jumpstarter pipeline"
-      component: runtime
-      workingDir: ${PROJECT_SOURCE}
-      commandLine: "oc apply -f jumpstarter_pipeline.yaml"
+  - id: jumpstarter-pipeline
+      exec:
+        label: "Start jumpstarter pipeline"
+        component: runtime
+        workingDir: ${PROJECT_SOURCE}
+        commandLine: "oc apply -f jumpstarter_pipeline.yaml"
