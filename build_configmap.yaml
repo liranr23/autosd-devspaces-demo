@@ -1,0 +1,317 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: mpp-config-test
+  namespace: liranr23-devspaces
+immutable: false
+data:
+  collector.container: |
+    [Unit]
+    After=podman.service
+    Wants=podman.service
+
+    [Container]
+    Image=otel-collector
+    ContainerName=collector
+
+    # Network configuration
+    Network=host
+
+    # Volume mounts
+    Volume=/usr/libexec/config.yaml:/app/config.yaml:Z
+    Volume=%t/podman/podman.sock:/run/podman/podman.sock
+    Volume=/proc:/hostfs/proc
+
+    # Security settings
+    PodmanArgs=--security-opt=label=disable --pull never
+
+    # Environment variables
+    Environment=CONTAINER_HOST=unix:///run/podman/podman.sock
+
+    [Service]
+    Restart=always
+    TimeoutStartSec=300
+    TimeoutStopSec=30
+
+    [Install]
+    WantedBy=default.target
+  config.yaml: |
+    receivers:
+      dlt:
+        daemon_address: 192.168.7.2
+        daemon_port: 3490
+        service_name: "dlt-receiver"
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: 'podman'
+              scrape_interval: 1s
+              static_configs:
+                - targets: ['localhost:9882']
+      hostmetrics:
+        collection_interval: 1s
+        root_path: /hostfs
+        scrapers:
+          cpu:
+            metrics:
+              system.cpu.utilization:
+                enabled: true
+              system.cpu.logical.count:
+                enabled: true
+          memory:
+            metrics:
+              system.memory.usage:
+                enabled: true
+          disk:
+            metrics:
+              system.disk.operations:
+                enabled: true
+              system.disk.io:
+                enabled: true
+              system.disk.operation_time:
+                enabled: true
+    processors:
+      filter:
+        error_mode: ignore
+        logs:
+          log_record:
+            - 'not IsMatch(body, ".*Execute periodic Work.*")'
+    exporters:
+      debug:
+        verbosity: detailed
+      otlphttp:
+        endpoint: "http://otel-http-lgtm.apps-crc.testing:4318"
+        tls:
+          insecure: true
+
+    service:
+      pipelines:
+        metrics:
+          receivers: [prometheus,hostmetrics]
+          processors: []
+          exporters: [debug, otlphttp]
+        logs:
+          receivers: [dlt]
+          processors: [filter]
+          exporters: [debug, otlphttp]
+  minimal.mpp.yml: |2
+        version: '2'
+        mpp-vars:
+          name: ces2025
+          qm_extra_rpms:
+          - stress-ng
+          - util-linux-core
+          qm_memory_max: 4294967296
+          use_bluechi: false
+          use_containers_extra_store: true
+          use_qm: true
+          use_qm_containers_extra_store: true
+          ssh_permit_root_login: true
+          ssh_permit_password_auth: true
+
+        pipelines:
+        - name: qm_rootfs
+          build: name:build
+          stages:
+          - type: org.osbuild.copy
+            inputs:
+              tree:
+                type: org.osbuild.tree
+                origin: org.osbuild.pipeline
+                references:
+                  - name:qm_rootfs_base
+            options:
+              paths:
+                - from: input://tree/
+                  to: tree:///
+
+        - name: rootfs
+          build: name:build
+          stages:
+          - type: org.osbuild.rpm
+            options:
+              gpgkeys:
+              - mpp-eval: distro_gpg_keys
+              disable_dracut: true
+              exclude:
+                docs: true
+            inputs:
+              packages:
+                type: org.osbuild.files
+                origin: org.osbuild.source
+                mpp-depsolve:
+                  architecture: $arch
+                  ignore-weak-deps: true
+                  module-platform-id: $distro_module_id
+                  baseurl: $distro_baseurl_repo
+                  repos:
+                    mpp-join:
+                    - mpp-eval: image_repos
+                    - mpp-eval: extra_repos
+                    - - id: copr-sample-apps
+                        baseurl: https://download.copr.fedorainfracloud.org/results/alexl/cs9-sample-images/centos-stream-9-$arch/
+                  packages:
+                    mpp-join:
+                    - mpp-eval: image_rpms
+                    - mpp-eval: extra_rpms
+                    - - dnf
+                      - NetworkManager-tui
+                      - chrony
+                      - iproute
+                      - iputils
+                      - less
+                      - ncurses
+                      - openssh-clients
+                      - openssh-server
+                      - podman
+                      - strace
+                      - stress-ng
+                      - sudo
+                      - tmux
+                      - unzip
+                      - vim-enhanced
+                      - wget
+                  excludes:
+                  - dracut-config-rescue
+
+          - type: org.osbuild.skopeo
+            inputs:
+              images:
+                type: org.osbuild.containers
+                origin: org.osbuild.source
+                mpp-resolve-images:
+                  images:
+                  - source:  quay.io/bzlotnik/dlt-receiver
+                    tag: arm
+                    name: otel-collector
+            options:
+              destination:
+                type: containers-storage
+                storage-path:
+                  mpp-eval: containers_extra_store
+
+          - type: org.osbuild.mkdir
+            options:
+              paths:
+              - path: /etc/containers/systemd
+                exist_ok: true
+                parents: true
+              - path: /etc/sysconfig
+                exist_ok: true
+                parents: true
+              - path: /usr/share/containers
+                exist_ok: true
+
+
+          - type: org.osbuild.groups
+            options:
+              groups:
+                guest:
+                  gid:
+                    mpp-eval: guest_gid
+
+          - type: org.osbuild.users
+            options:
+              users:
+                guest:
+                  password:
+                    mpp-eval: guest_password
+                  gid:
+                    mpp-eval: guest_gid
+                  uid:
+                    mpp-eval: guest_uid
+
+          # Network daemon setup
+          # This setting is meant for demonstration purposes only.
+          - type: org.osbuild.sshd.config
+            options:
+              config:
+                PasswordAuthentication:
+                  mpp-eval: ssh_permit_password_auth
+                PermitRootLogin:
+                  mpp-eval: ssh_permit_root_login
+
+          # Now enable our systemd services
+          - type: org.osbuild.systemd
+            options:
+              enabled_services:
+              - chronyd.service
+              - sshd.service
+  script.sh: |
+    #!/bin/bash
+
+    echo "Run Vector app IP bind setup"
+    end=$((SECONDS + 30))
+    echo "trying for up to 30 seconds to find network interface..."
+
+    while [[ $SECONDS -lt $end ]]; do
+        nic=$(ip route | grep default | head -n 1 | cut -d' ' -f5)
+        if [[ -n "$nic" ]]; then
+            echo "found network interface: $nic"
+            break
+        fi
+        sleep 1
+    done
+
+    ip addr add 172.31.31.2/24 dev $nic
+    ip addr add 192.168.7.2/24 dev $nic
+
+    echo "Initiate podman"
+    systemctl start podman.socket
+
+    export LD_LIBRARY_PATH=/lib64:$LD_LIBRARY_PATH
+    ln -sf /lib64/libusb-1.0.so.0 /lib64/libusb-1.0.so
+    ldconfig
+    pushd /install
+    nohup ./run.sh &
+    popd
+
+    echo "Settings for dlt-receiver are in '/usr/libexec/config.yaml'. They will send logs to the HTTP route 'http://192.168.7.20:4318'. You may want to change it and re-run the container."
+    echo "On your laptop, IP bind in order to let the hardware connect, then use port forward: 'oc port-forward svc/lgtm -n lgtm 4318:4318 --address=0.0.0.0'"
+  setup_ip.sh: |+
+    #!/bin/bash
+    set -e
+
+    ip=$1
+    echo "Given server IP: $ip"
+
+    echo "Setup chrony server..."
+    echo "server $ip iburst prefer" >> /etc/chrony.conf
+    systemctl restart chronyd
+
+    sleep 5
+    chronyc tracking
+
+    echo "Setup OTEL endpoint..."
+    sed -i 's+endpoint.*+endpoint: "http://'$ip':4318"+g' /usr/libexec/config.yaml
+    systemctl restart collector.service 
+
+  stress_asil.sh: |
+    #!/bin/bash
+
+    ## A simple script to run stress-ng
+    # chrt is used to set the real-time scheduler to fifo and priority
+    # stress-ng is using number of processors and max cpu-load of 90
+
+    PRIO="99"
+    CHRT="/usr/bin/chrt -f ${PRIO}"
+    CPULOAD=60
+
+    STRESS="/usr/bin/stress-ng --cpu $(nproc) --cpu-load ${CPULOAD}"
+    CMD="${CHRT} ${STRESS}"
+    echo "Running: $CMD"
+    $CMD
+  stress_qm.sh: |
+    #!/bin/bash
+
+    ## A simple script to run stress-ng
+    # podman is used to talk with the applications in the QM layer.
+    # stress-ng is using number of processors and max cpu-load of 90
+
+    CPULOAD=60
+    PODMAN="/usr/bin/podman exec -it qm"
+
+    STRESS="/usr/bin/stress-ng --cpu $(nproc) --cpu-load ${CPULOAD} --temp-path /tmp"
+    CMD="${PODMAN} ${STRESS}"
+    echo "Running: $CMD"
+    $CMD

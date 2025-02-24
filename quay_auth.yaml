@@ -1,0 +1,10 @@
+kind: Secret
+apiVersion: v1
+metadata:
+  name: quay-authentication
+  namespace: benny
+  annotations:
+    tekton.dev/docker-0: 'https://quay.io'
+data:
+  .dockerconfigjson: MIIEpQIBAAKCAQEAulqb/Y..
+type: kubernetes.io/dockerconfigjson

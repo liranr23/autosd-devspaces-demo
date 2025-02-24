@@ -1,0 +1,48 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: osbuilds-
+  namespace: benny
+  labels:
+    tekton.dev/pipeline: osbuilds
+spec:
+  params:
+    - name: distro
+      value: cs9
+    - name: target
+      value: qemu
+    - name: arch
+      value: aarch64
+    - name: export-format
+      value: image
+    - name: mode
+      value: image
+    - name: storage-class
+      value: gp3-csi
+    - name: automotive-osbuild-image
+      value: 'quay.io/centos-sig-automotive/automotive-osbuild:latest'
+    - name: output-pvc-size
+      value: 12Gi
+  pipelineRef:
+    name: osbuilds
+  taskRunTemplate:
+    serviceAccountName: pipeline
+  timeouts:
+    pipeline: 1h0m0s
+  workspaces:
+    - name: shared-workspace
+      volumeClaimTemplate:
+        metadata:
+          creationTimestamp: null
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+          storageClassName: efs-sc
+          volumeMode: Filesystem
+        status: {}
+    - configMap:
+        name: mpp-config-test
+      name: mpp-config-workspace

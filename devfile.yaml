@@ -1,0 +1,95 @@
+schemaVersion: 2.3.0
+metadata:
+  name: jumpstarter-devspace
+  icon: https://jumpstarter.dev/jumpstarter.svg
+  tags:
+    - C
+    - Jumpstarter
+  language: C
+projects:
+  - name: jumpstarter
+    git:
+      remotes:
+        origin: https://github.com/liranr23/autosd-devspaces-demo.git
+components:
+   - name: runtime
+     container:
+       image: quay.io/devfile/universal-developer-image:ubi9-latest
+       mountSources: true
+       env: # use insecure TLS connection for now, you can remove this if your jumpstarter deployment has trusted TLS certs
+        - name: JUMPSTARTER_GRPC_INSECURE
+          value: "1"
+
+commands:
+  - id: client-list
+    exec:
+      component: runtime
+      commandLine: jmp list
+
+  - id: list-my-leases
+    exec:
+      component: runtime
+      commandLine: jmp lease list default
+
+  - id: release-my-leases
+    exec:
+      component: runtime
+      commandLine: jmp lease release default --all
+
+  - id: buildimage
+    exec:
+      label: "Build Image"
+      component: runtime
+      workingDir: ${PROJECT_SOURCE}
+      commandLine: "podman build -t image-registry.openshift-image-registry.svc:5000/openshift/liran-example ."
+      group:
+        kind: build
+  - id: loginlocalregistry
+    exec:
+      label: "Login to local OpenShift registry"
+      component: runtime
+      workingDir: ${PROJECT_SOURCE}
+      commandLine: "podman login --tls-verify=false -u kubeadmin -p $(oc whoami -t) image-registry.openshift-image-registry.svc:5000"
+      group:
+        kind: run
+  - id: pushimage
+    exec:
+      label: "Push Image"
+      component: runtime
+      workingDir: ${PROJECT_SOURCE}
+      commandLine: "podman push --tls-verify=false image-registry.openshift-image-registry.svc:5000/openshift/liran-example"
+      group:
+        kind: build
+  - id: postmpp
+    exec:
+      label: "Post MPP"
+      component: runtime
+      workingDir: ${PROJECT_SOURCE}
+      commandLine: "oc apply -f build_configmap.yaml"
+  - id: postquaycreds
+    exec:
+      label: "Post registery credentials"
+      component: runtime
+      workingDir: ${PROJECT_SOURCE}
+      commandLine: "oc apply -f quay_auth.yaml"
+  - id: autosd-pipeline
+    exec:
+      label: "Start AutoSD pipeline"
+      component: runtime
+      workingDir: ${PROJECT_SOURCE}
+      commandLine: "oc apply -f osbuildrun.yaml"
+  - id: buildautosd
+    exec:
+      label: "Build AutoSD image"
+      composite:
+        commands:
+          #- postquaycreds
+          - postmpp
+          - autosd-pipeline
+        parallel: false
+- id: jumpstarter-pipeline
+    exec:
+      label: "Start jumpstarter pipeline"
+      component: runtime
+      workingDir: ${PROJECT_SOURCE}
+      commandLine: "oc apply -f jumpstarter_pipeline.yaml"
