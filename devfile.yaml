@@ -79,7 +79,6 @@ commands:
       workingDir: ${PROJECT_SOURCE}
       commandLine: "oc apply -f osbuildrun.yaml"
   - id: buildautosd
-    label: "Build AutoSD image"
     composite:
       commands:
         #- postquaycreds
