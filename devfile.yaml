@@ -79,14 +79,13 @@ commands:
       workingDir: ${PROJECT_SOURCE}
       commandLine: "oc apply -f osbuildrun.yaml"
   - id: buildautosd
-    exec:
-      label: "Build AutoSD image"
-      composite:
-        commands:
-          #- postquaycreds
-          - postmpp
-          - autosd-pipeline
-        parallel: false
+    label: "Build AutoSD image"
+    composite:
+      commands:
+        #- postquaycreds
+        - postmpp
+        - autosd-pipeline
+      parallel: false
 - id: jumpstarter-pipeline
     exec:
       label: "Start jumpstarter pipeline"
