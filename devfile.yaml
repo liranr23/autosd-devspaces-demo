@@ -81,7 +81,6 @@ commands:
   - id: buildautosd
     composite:
       commands:
-        #- postquaycreds
         - postmpp
         - autosd-pipeline
       parallel: false
