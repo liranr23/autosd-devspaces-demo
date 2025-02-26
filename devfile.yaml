@@ -65,7 +65,7 @@ commands:
       label: "Post MPP"
       component: runtime
       workingDir: ${PWD}
-      commandLine: "oc apply -f ./build_configmap.yaml"
+      commandLine: "oc apply -f ${PWD}/build_configmap.yaml"
   - id: postquaycreds
     exec:
       label: "Post registery credentials"
