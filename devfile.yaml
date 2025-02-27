@@ -1,11 +1,6 @@
 schemaVersion: 2.3.0
 metadata:
   name: liran-devspace
-  icon: https://jumpstarter.dev/jumpstarter.svg
-  tags:
-    - C
-    - Jumpstarter
-  language: C
 components:
    - name: runtime
      container:
