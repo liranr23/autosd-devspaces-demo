@@ -6,11 +6,6 @@ metadata:
     - C
     - Jumpstarter
   language: C
-projects:
-  - name: autosd-devspaces-demo
-    git:
-      remotes:
-        origin: https://github.com/liranr23/autosd-devspaces-demo.git
 components:
    - name: runtime
      container:
