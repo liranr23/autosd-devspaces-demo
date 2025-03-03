@@ -58,8 +58,8 @@ commands:
     exec:
       label: "Post MPP"
       component: runtime
-      workingDir: ${PWD}
-      commandLine: "LOCATION=$(find /projects/ -name build_configmap.yaml) && oc apply -f ${LOCATION}"
+      workingDir: ${PROJECT_SOURCE}
+      commandLine: "oc apply -f build_configmap.yaml"
   - id: testcmd
     exec:
       label: "test curent dir"
